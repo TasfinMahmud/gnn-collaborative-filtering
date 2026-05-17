@@ -61,5 +61,5 @@ python train.py
 - [ ] Implement hard negative sampling.
 
 ---
-**Author**: Tasfin Mahmud
+**Author**: Tasfin Mahmud<br>
 *AI/ML Researcher | Graph Neural Networks & Reinforcement Learning*
