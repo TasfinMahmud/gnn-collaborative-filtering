@@ -60,6 +60,10 @@ python train.py
 - [ ] Scale up to **MovieLens 1M** and **Amazon Books**.
 - [ ] Implement hard negative sampling.
 
+## 📚 References
+1. **LightGCN Paper:** He, X., Deng, K., Wang, X., Li, Y., Zhang, Y., & Wang, M. (2020). *LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation*. In Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval (SIGIR '20). [arXiv:2002.02126](https://arxiv.org/abs/2002.02126)
+2. **Dataset:** Harper, F. M., & Konstan, J. A. (2015). *The MovieLens Datasets: History and Context*. ACM Transactions on Interactive Intelligent Systems (TiiS), 5(4), 1-19. [GroupLens Research](https://grouplens.org/datasets/movielens/)
+
 ---
 **Author**: Tasfin Mahmud<br>
 *AI/ML Researcher | Graph Neural Networks & Reinforcement Learning*
