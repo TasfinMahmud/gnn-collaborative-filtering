@@ -162,6 +162,10 @@ def load_data(dataset_name='ml-100k', root='data'):
         Ground-truth positive items per user in the test set.
     num_users : int
     num_items : int
+    user_mapping : dict
+        Mapping from dataset user_id to internal user_idx (0-based).
+    item_mapping : dict
+        Mapping from dataset item_id to internal item_idx (0-based).
     """
     if dataset_name not in DATASET_REGISTRY:
         raise ValueError(f"Unknown dataset '{dataset_name}'. "
@@ -205,10 +209,55 @@ def load_data(dataset_name='ml-100k', root='data'):
     test_data = test_df.groupby('user_idx')['item_idx'].apply(list).to_dict()
 
     print(f"  Train: {len(train_df):,} | Test: {len(test_df):,}")
-    return train_edge_index, train_users, train_items, test_data, num_users, num_items
+    return train_edge_index, train_users, train_items, test_data, num_users, num_items, user_mapping, item_mapping
 
 
 # Backward-compatible wrapper
 def download_movielens(root='data'):
     """Legacy wrapper — downloads ML-100k and returns the data path."""
     return download_movielens_100k(root)
+
+
+# ──────────────────────────────────────────────────────────────
+# Metadata Extraction
+# ──────────────────────────────────────────────────────────────
+
+def get_item_metadata(dataset_name='ml-100k', root='data'):
+    """
+    Fetch item metadata (titles).
+
+    Returns
+    -------
+    metadata : dict
+        Mapping from dataset `item_id` to a string description (e.g. title).
+    """
+    metadata = {}
+    if dataset_name == 'ml-100k':
+        path = os.path.join(root, 'ml-100k', 'u.item')
+        if not os.path.exists(path):
+            download_movielens_100k(root)
+        with open(path, 'r', encoding='latin-1') as f:
+            for line in f:
+                parts = line.split('|')
+                if len(parts) > 1:
+                    item_id = int(parts[0])
+                    title = parts[1]
+                    metadata[item_id] = title
+
+    elif dataset_name == 'ml-1m':
+        path = os.path.join(root, 'ml-1m', 'movies.dat')
+        if not os.path.exists(path):
+            download_movielens_1m(root)
+        with open(path, 'r', encoding='latin-1') as f:
+            for line in f:
+                parts = line.strip().split('::')
+                if len(parts) >= 2:
+                    item_id = int(parts[0])
+                    title = parts[1]
+                    metadata[item_id] = title
+
+    elif dataset_name == 'amazon-books':
+        # Too heavy for simple inference, returning raw IDs.
+        pass
+
+    return metadata

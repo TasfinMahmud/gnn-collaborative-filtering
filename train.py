@@ -14,6 +14,7 @@ python train.py --model gat --dataset amazon-books --epochs 30
 
 import argparse
 import time
+import os
 import torch
 import torch.optim as optim
 import numpy as np
@@ -135,6 +136,8 @@ def main():
                         help='Evaluate every N epochs (default: 5)')
     parser.add_argument('--top-k', type=int, default=20,
                         help='K for Recall@K and NDCG@K (default: 20)')
+    parser.add_argument('--save-dir', type=str, default='checkpoints',
+                        help='Directory to save model weights (default: checkpoints)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed (default: 42)')
     args = parser.parse_args()
@@ -164,9 +167,12 @@ def main():
               f"then hard negatives")
     print(f"{'='*60}\n")
 
+    os.makedirs(args.save_dir, exist_ok=True)
+
     # ── Data ─────────────────────────────────────────────────
     (train_edge_index, train_users, train_items,
-     test_data, num_users, num_items) = load_data(args.dataset)
+     test_data, num_users, num_items,
+     user_mapping, item_mapping) = load_data(args.dataset)
 
     train_edge_index = train_edge_index.to(device)
     train_users = train_users.to(device)
@@ -261,6 +267,20 @@ def main():
             if recall > best_recall:
                 best_recall = recall
                 best_ndcg = ndcg
+                # Save best model
+                model_path = os.path.join(args.save_dir, f"{args.model}_{args.dataset}_best.pth")
+                torch.save(model.state_dict(), model_path)
+                # Save metadata
+                meta_path = os.path.join(args.save_dir, f"{args.model}_{args.dataset}_meta.pt")
+                torch.save({
+                    'num_users': num_users,
+                    'num_items': num_items,
+                    'embedding_dim': args.embedding_dim,
+                    'num_layers': args.num_layers,
+                    'user_mapping': user_mapping,
+                    'item_mapping': item_mapping,
+                }, meta_path)
+                
             print(f"  -> Recall@{args.top_k}: {recall:.4f}  "
                   f"NDCG@{args.top_k}: {ndcg:.4f}")
 
