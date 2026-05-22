@@ -170,6 +170,10 @@ def main():
                         help='Policy gradient estimator: ips, dm, or dr')
     parser.add_argument('--pg-clip-ratio', type=float, default=10.0,
                         help='Importance weight clipping ratio (default: 10)')
+    parser.add_argument('--causal-discovery', action='store_true',
+                        help='Enable latent confounder discovery')
+    parser.add_argument('--discovery-components', type=int, default=5,
+                        help='Number of latent confounders to extract')
     args = parser.parse_args()
 
     # ── Reproducibility ──────────────────────────────────────
@@ -271,6 +275,30 @@ def main():
         ).to(device)
         print(f"Causal PG: estimator={args.pg_estimator}, "
               f"clip_ratio={args.pg_clip_ratio}")
+
+        if args.causal_discovery:
+            from causal.discovery import LatentConfounderDiscovery
+            print(f"Running Causal Discovery (components={args.discovery_components})...")
+            discovery = LatentConfounderDiscovery(num_users, num_items, args.discovery_components)
+            confounders = discovery.fit(train_users, train_items).to(device)
+            
+            # Override item bias in reward shaper with multi-dimensional linear layer
+            import torch.nn as nn
+            import torch.nn.functional as F
+            causal_pg.reward_shaper.item_bias = nn.Linear(args.discovery_components, 1).to(device)
+            causal_pg.reward_shaper.latent_confounders = confounders
+            
+            # Patch the forward pass
+            def shaper_forward(self, item_indices, observed_rewards):
+                c = self.latent_confounders[item_indices]
+                confound = self.item_bias(c).squeeze(-1)
+                causal_rewards = observed_rewards - confound.detach()
+                confound_loss = F.mse_loss(confound, observed_rewards.detach())
+                return causal_rewards, confound_loss
+            import types
+            causal_pg.reward_shaper.forward = types.MethodType(shaper_forward, causal_pg.reward_shaper)
+            print(f"  -> Discovered {args.discovery_components} latent confounders")
+
         pg_params = sum(p.numel() for p in causal_pg.parameters())
         print(f"Causal PG extra parameters: {pg_params:,}")
 

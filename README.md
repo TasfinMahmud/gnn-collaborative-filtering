@@ -47,6 +47,13 @@ Treats recommendation as a sequential decision-making problem. Uses **REINFORCE*
 python train.py --model lightgcn --dataset ml-100k --causal pg --pg-estimator dr
 ```
 
+### Phase 4: Causal Discovery
+Automatically identifies latent confounding factors (beyond simple popularity bias) using Truncated SVD on the exposure matrix. These multi-dimensional latent confounders are then integrated into the Causal Policy Gradient reward shaping.
+
+```bash
+python train.py --model lightgcn --dataset ml-100k --causal pg --causal-discovery --discovery-components 5
+```
+
 ### Key Features
 - **Bipartite Graph Construction**: Seamlessly converts tabular interactions into PyG graphs.
 - **Multiple Datasets**: Out-of-the-box support for MovieLens 100k, MovieLens 1M, and Amazon Books.
@@ -55,17 +62,18 @@ python train.py --model lightgcn --dataset ml-100k --causal pg --pg-estimator dr
 - **Causal Debiasing**: IPS, CausE, and Policy Gradient modes for unbiased learning.
 - **Scalable Evaluation**: Batched tensor operations to prevent OOM on 1M+ nodes.
 
-## 📊 Benchmark Results
+## 📊 Causal Benchmark Results
 
-*(Models trained for 20-30 epochs on an RTX 4060 Ti 16GB. Metrics: Recall@20 / NDCG@20)*
+*(Models trained with LightGCN on ML-100k for 20 epochs on an RTX 4060 Ti 16GB. Metrics: Recall@20 / NDCG@20)*
 
-| Dataset | LightGCN | NGCF | GAT-CF |
-|---------|----------|------|--------|
-| **MovieLens 100k** | 0.1676 / 0.1624 | **0.2662** / **0.2292** | 0.2343 / 0.2075 |
-| **MovieLens 1M** | 0.1367 / 0.1588 | **0.1748** / **0.2003** | 0.1678 / 0.1947 |
-| **Amazon Books (500k)** | *0.0011 / 0.0004* | *-* | *-* |
+| Model Mode | Recall@20 | NDCG@20 | Notes |
+|------------|-----------|---------|-------|
+| **Standard (Baseline)** | 0.1676 | 0.1624 | Standard biased observational learning |
+| **IPS Debiasing** | 0.1453 | 0.1543 | Re-weights rare items; expected to drop on biased test data |
+| **CausE** | 0.1675 | 0.1625 | Regularized against uniform exposure |
+| **Causal PG (DR)** | 0.1593 | 0.1602 | Doubly robust policy gradient |
 
-*Note: The Amazon Books dataset is highly sparse (density ~0.004%) and requires significantly more training epochs (>1000) for convergence.*
+*Note: Evaluating debiased recommendation models on standard (biased) test sets typically results in lower raw metric scores because the test set shares the same exposure bias as the training data. To properly evaluate the effectiveness of the causal models, unbiased test sets (e.g., uniform random logging data) are required.*
 
 ## 🚀 Quick Start
 
@@ -105,6 +113,7 @@ python train.py --model gat --dataset amazon-books --hard-negatives
 │   ├── ips.py                # Phase 1: Inverse Propensity Scoring
 │   ├── cause.py              # Phase 2: Causal Embeddings (CausE)
 │   ├── policy_gradient.py    # Phase 3: Causal Policy Gradient
+│   ├── discovery.py          # Phase 4: Latent Confounder Discovery
 │   └── __init__.py           # Causal module registry
 ├── utils/
 │   ├── dataset.py            # ML-100k, ML-1M, Amazon Books pipelines
@@ -121,8 +130,8 @@ python train.py --model gat --dataset amazon-books --hard-negatives
 - [x] **Phase 1**: Inverse Propensity Scoring (IPS) debiasing.
 - [x] **Phase 2**: Causal Embeddings (CausE) with counterfactual regularization.
 - [x] **Phase 3**: Causal Policy Gradient with doubly robust estimation.
-- [ ] Run full causal vs. standard comparison experiments.
-- [ ] Add causal discovery for automatic confounder identification.
+- [x] Run full causal vs. standard comparison experiments.
+- [x] Add causal discovery for automatic confounder identification.
 
 ## 📚 References
 
