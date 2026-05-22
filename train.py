@@ -5,11 +5,18 @@ Supports: LightGCN | NGCF | GAT
 Datasets: ml-100k | ml-1m | amazon-books
 Loss:     BPR with optional hard-negative sampling
 
+Causal RL Modes:
+  --causal ips     Inverse Propensity Scoring (debiased BPR)
+  --causal cause   Causal Embeddings with counterfactual regularization
+  --causal pg      Causal Policy Gradient (REINFORCE + reward shaping)
+
 Usage
 -----
 python train.py --model lightgcn --dataset ml-100k
 python train.py --model ngcf --dataset ml-1m --hard-negatives
-python train.py --model gat --dataset amazon-books --epochs 30
+python train.py --model lightgcn --dataset ml-100k --causal ips
+python train.py --model lightgcn --dataset ml-100k --causal cause
+python train.py --model lightgcn --dataset ml-100k --causal pg --pg-estimator dr
 """
 
 import argparse
@@ -140,6 +147,29 @@ def main():
                         help='Directory to save model weights (default: checkpoints)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed (default: 42)')
+
+    # ── Causal RL arguments ──────────────────────────────────
+    parser.add_argument('--causal', type=str, default=None,
+                        choices=['ips', 'cause', 'pg'],
+                        help='Causal RL mode: ips (debiasing), '
+                             'cause (causal embeddings), '
+                             'pg (policy gradient)')
+    parser.add_argument('--ips-clip', type=float, default=0.01,
+                        help='Min propensity clip for IPS (default: 0.01)')
+    parser.add_argument('--ips-smoothing', type=float, default=0.5,
+                        help='Propensity smoothing exponent (default: 0.5)')
+    parser.add_argument('--ips-normalize', action='store_true', default=True,
+                        help='Use Self-Normalized IPS (SNIPS)')
+    parser.add_argument('--cause-reg-weight', type=float, default=0.01,
+                        help='CausE discrepancy regularization weight')
+    parser.add_argument('--cause-cf-samples', type=int, default=0,
+                        help='Number of counterfactual samples '
+                             '(default: 0 = same as training data)')
+    parser.add_argument('--pg-estimator', type=str, default='dr',
+                        choices=['ips', 'dm', 'dr'],
+                        help='Policy gradient estimator: ips, dm, or dr')
+    parser.add_argument('--pg-clip-ratio', type=float, default=10.0,
+                        help='Importance weight clipping ratio (default: 10)')
     args = parser.parse_args()
 
     # ── Reproducibility ──────────────────────────────────────
@@ -165,6 +195,17 @@ def main():
     if args.hard_negatives:
         print(f"  Warmup   : {args.hard_neg_warmup} epochs (uniform), "
               f"then hard negatives")
+    if args.causal:
+        print(f"  Causal   : {args.causal.upper()}")
+        if args.causal == 'ips':
+            print(f"    IPS clip     : {args.ips_clip}")
+            print(f"    IPS smoothing: {args.ips_smoothing}")
+            print(f"    SNIPS        : {args.ips_normalize}")
+        elif args.causal == 'cause':
+            print(f"    CausE reg    : {args.cause_reg_weight}")
+        elif args.causal == 'pg':
+            print(f"    PG estimator : {args.pg_estimator}")
+            print(f"    PG clip ratio: {args.pg_clip_ratio}")
     print(f"{'='*60}\n")
 
     os.makedirs(args.save_dir, exist_ok=True)
@@ -188,10 +229,63 @@ def main():
     ).to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Model parameters: {total_params:,}\n")
+    print(f"Model parameters: {total_params:,}")
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr,
+    # ── Causal RL setup ──────────────────────────────────────
+    ips_scorer = None
+    cause_reg = None
+    causal_pg = None
+
+    if args.causal == 'ips':
+        from causal.ips import InversePropensityScoring, compute_propensity_scores
+        propensity = compute_propensity_scores(
+            train_items, num_items,
+            mode='popularity',
+            clip_min=args.ips_clip,
+            smoothing=args.ips_smoothing,
+        )
+        ips_scorer = InversePropensityScoring(
+            propensity, normalize=args.ips_normalize
+        ).to(device)
+        print(f"IPS: propensity range [{propensity.min():.4f}, {propensity.max():.4f}]")
+        print(f"IPS: effective weight range [{1/propensity.max():.2f}, {1/propensity.min():.2f}]")
+
+    elif args.causal == 'cause':
+        from causal.cause import CausalEmbeddingRegularizer, create_counterfactual_data
+        cause_reg = CausalEmbeddingRegularizer(
+            num_users, num_items, args.embedding_dim,
+            reg_weight=args.cause_reg_weight,
+        ).to(device)
+        cf_num = args.cause_cf_samples if args.cause_cf_samples > 0 else len(train_users)
+        print(f"CausE: {cf_num:,} counterfactual samples, "
+              f"reg_weight={args.cause_reg_weight}")
+        causal_params = sum(p.numel() for p in cause_reg.parameters())
+        print(f"CausE extra parameters: {causal_params:,}")
+
+    elif args.causal == 'pg':
+        from causal.policy_gradient import CausalPolicyGradient
+        causal_pg = CausalPolicyGradient(
+            num_items,
+            estimator=args.pg_estimator,
+            clip_ratio=args.pg_clip_ratio,
+        ).to(device)
+        print(f"Causal PG: estimator={args.pg_estimator}, "
+              f"clip_ratio={args.pg_clip_ratio}")
+        pg_params = sum(p.numel() for p in causal_pg.parameters())
+        print(f"Causal PG extra parameters: {pg_params:,}")
+
+    # ── Optimizer (include causal module params) ─────────────
+    all_params = list(model.parameters())
+    if cause_reg is not None:
+        all_params += list(cause_reg.parameters())
+    if causal_pg is not None:
+        all_params += list(causal_pg.parameters())
+
+    optimizer = optim.Adam(all_params, lr=args.lr,
                            weight_decay=args.weight_decay)
+
+    print(f"\nTotal trainable parameters: "
+          f"{sum(p.numel() for p in all_params):,}\n")
 
     # ── Training loop ────────────────────────────────────────
     best_recall, best_ndcg = 0.0, 0.0
@@ -200,7 +294,13 @@ def main():
     print("Starting training...\n")
     for epoch in range(1, args.epochs + 1):
         model.train()
+        if cause_reg is not None:
+            cause_reg.train()
+        if causal_pg is not None:
+            causal_pg.train()
+
         epoch_loss = 0.0
+        epoch_causal_info = {}
         epoch_start = time.time()
 
         for batch_users, batch_pos_items, batch_neg_items in get_bpr_batches(
@@ -239,10 +339,55 @@ def main():
                         train_edge_index, batch_users, batch_pos_items,
                         mixed_neg)
 
-            # ── BPR loss ─────────────────────────────────────
+            # ── Compute loss (standard or causal) ────────────
             pos_scores = (user_emb * pos_item_emb).sum(dim=1)
             neg_scores = (user_emb * neg_item_emb).sum(dim=1)
-            loss = bpr_loss(pos_scores, neg_scores)
+
+            if args.causal == 'ips':
+                # Phase 1: IPS-weighted BPR
+                loss = ips_scorer.weighted_bpr_loss(
+                    pos_scores, neg_scores, batch_pos_items
+                )
+
+            elif args.causal == 'cause':
+                # Phase 2: Standard BPR + CausE regularization
+                loss = bpr_loss(pos_scores, neg_scores)
+
+                # Counterfactual BPR on uniform data
+                cf_users, cf_items = create_counterfactual_data(
+                    num_users, num_items, len(batch_users))
+                cf_users = cf_users.to(device)
+                cf_items = cf_items.to(device)
+                cf_neg = torch.randint(0, num_items,
+                                       (len(cf_users),)).to(device)
+                cf_loss = cause_reg.counterfactual_bpr_loss(
+                    cf_users, cf_items, cf_neg
+                )
+                loss += cf_loss
+
+                # Discrepancy regularization
+                disc_loss = cause_reg.discrepancy_loss(
+                    user_emb, pos_item_emb,
+                    batch_users, batch_pos_items
+                )
+                loss += disc_loss
+
+            elif args.causal == 'pg':
+                # Phase 3: Causal Policy Gradient
+                # First, compute standard BPR as the base loss
+                base_loss = bpr_loss(pos_scores, neg_scores)
+
+                # Then add the causal PG correction
+                pg_loss, pg_info = causal_pg.policy_gradient_loss(
+                    user_emb, pos_item_emb, neg_item_emb,
+                    batch_pos_items, batch_neg_items,
+                )
+                loss = 0.5 * base_loss + 0.5 * pg_loss
+                epoch_causal_info = pg_info
+
+            else:
+                # Standard BPR (no causal correction)
+                loss = bpr_loss(pos_scores, neg_scores)
 
             # L2 regularisation
             l2_reg = (user_emb.norm(2).pow(2) +
@@ -255,9 +400,13 @@ def main():
             epoch_loss += loss.item()
 
         elapsed = time.time() - epoch_start
-        print(f"Epoch {epoch:03d}/{args.epochs}  "
-              f"Loss: {epoch_loss:.4f}  "
-              f"Time: {elapsed:.1f}s")
+        log_line = (f"Epoch {epoch:03d}/{args.epochs}  "
+                    f"Loss: {epoch_loss:.4f}  "
+                    f"Time: {elapsed:.1f}s")
+        if epoch_causal_info:
+            log_line += (f"  PG: reward={epoch_causal_info.get('causal_reward_mean', 0):.4f}"
+                         f" iw={epoch_causal_info.get('importance_weight_mean', 0):.2f}")
+        print(log_line)
 
         # ── Evaluation ───────────────────────────────────────
         if epoch % args.eval_every == 0 or epoch == args.epochs:
@@ -279,6 +428,7 @@ def main():
                     'num_layers': args.num_layers,
                     'user_mapping': user_mapping,
                     'item_mapping': item_mapping,
+                    'causal_mode': args.causal,
                 }, meta_path)
                 
             print(f"  -> Recall@{args.top_k}: {recall:.4f}  "
@@ -289,6 +439,8 @@ def main():
     print(f"  Training complete in {total_time:.1f}s")
     print(f"  Best Recall@{args.top_k}: {best_recall:.4f}")
     print(f"  Best NDCG@{args.top_k}:   {best_ndcg:.4f}")
+    if args.causal:
+        print(f"  Causal mode: {args.causal.upper()}")
     print(f"{'='*60}")
 
 
