@@ -124,16 +124,6 @@ python train.py --model gat --dataset amazon-books --hard-negatives
 └── requirements.txt          # Dependencies
 ```
 
-## 🧠 Roadmap
-- [x] Add **NGCF** (Neural Graph Collaborative Filtering) baseline.
-- [x] Add **GAT** (Graph Attention Networks) for weighted edges.
-- [x] Scale up to **MovieLens 1M** and **Amazon Books**.
-- [x] Implement semi-hard negative sampling (Curriculum DNS).
-- [x] **Phase 1**: Inverse Propensity Scoring (IPS) debiasing.
-- [x] **Phase 2**: Causal Embeddings (CausE) with counterfactual regularization.
-- [x] **Phase 3**: Causal Policy Gradient with doubly robust estimation.
-- [x] Run full causal vs. standard comparison experiments.
-- [x] Add causal discovery for automatic confounder identification.
 
 ## 📚 References
 
