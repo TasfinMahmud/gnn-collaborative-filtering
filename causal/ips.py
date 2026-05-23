@@ -150,7 +150,5 @@ class InversePropensityScoring:
             The IPS-weighted BPR loss.
         """
         weights = self.get_weights(pos_item_indices)
-        per_sample_loss = -torch.log(
-            torch.sigmoid(pos_scores - neg_scores) + 1e-10
-        )
+        per_sample_loss = -F.logsigmoid(pos_scores - neg_scores)
         return (weights * per_sample_loss).mean()

@@ -37,7 +37,8 @@ from utils.metrics import evaluate
 
 def bpr_loss(pos_scores, neg_scores):
     """Bayesian Personalized Ranking loss."""
-    return -torch.mean(torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-10))
+    import torch.nn.functional as F
+    return -torch.mean(F.logsigmoid(pos_scores - neg_scores))
 
 
 # ──────────────────────────────────────────────────────────────
@@ -360,12 +361,12 @@ def main():
                         batch_users[:num_hard], num_items,
                         num_candidates=args.hard_neg_candidates)
                     # Mix: first `num_hard` get hard negs, rest keep uniform
-                    mixed_neg = batch_neg_items.clone()
-                    mixed_neg[:num_hard] = hard_neg_items
+                    batch_neg_items = batch_neg_items.clone()
+                    batch_neg_items[:num_hard] = hard_neg_items
                     # Re-forward with mixed negatives
                     user_emb, pos_item_emb, neg_item_emb = model(
                         train_edge_index, batch_users, batch_pos_items,
-                        mixed_neg)
+                        batch_neg_items)
 
             # ── Compute loss (standard or causal) ────────────
             pos_scores = (user_emb * pos_item_emb).sum(dim=1)
@@ -418,9 +419,12 @@ def main():
                 loss = bpr_loss(pos_scores, neg_scores)
 
             # L2 regularisation
-            l2_reg = (user_emb.norm(2).pow(2) +
-                      pos_item_emb.norm(2).pow(2) +
-                      neg_item_emb.norm(2).pow(2)) / 2
+            u_emb_0 = model.embedding_user.weight[batch_users]
+            pos_emb_0 = model.embedding_item.weight[batch_pos_items]
+            neg_emb_0 = model.embedding_item.weight[batch_neg_items]
+            l2_reg = (u_emb_0.norm(2).pow(2) +
+                      pos_emb_0.norm(2).pow(2) +
+                      neg_emb_0.norm(2).pow(2)) / 2
             loss += args.weight_decay * l2_reg / args.batch_size
 
             loss.backward()
