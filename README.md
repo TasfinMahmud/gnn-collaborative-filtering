@@ -10,10 +10,12 @@ A highly optimized PyTorch Geometric benchmark for Graph Neural Network (GNN) ba
 
 ### 1. LightGCN (SIGIR 2020)
 Simplifies message passing by removing learnable transformations and non-linear activations, achieving superior performance on collaborative filtering tasks.
+
 $$ e_u^{(k+1)} = \sum_{i \in \mathcal{N}_u} \frac{1}{\sqrt{|\mathcal{N}_u||\mathcal{N}_i|}} e_i^{(k)} $$
 
 ### 2. NGCF (SIGIR 2019)
 Neural Graph Collaborative Filtering explicitly models high-order connectivities with feature interaction terms and learnable weight matrices.
+
 $$ e_u^{(k+1)} = \sigma(W_1 e_u^{(k)} + \sum_{i \in \mathcal{N}_u} \frac{1}{\sqrt{|\mathcal{N}_u||\mathcal{N}_i|}} (W_1 e_i^{(k)} + W_2(e_i^{(k)} \odot e_u^{(k)}))) $$
 
 ### 3. GAT-CF (ICLR 2018)
