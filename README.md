@@ -1,4 +1,4 @@
-# Graph Neural Network & Causal RL for Recommendation 🚀
+# Graph Neural Network & Causal RL for Recommendation 
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)](https://pytorch.org/)
 [![PyTorch Geometric](https://img.shields.io/badge/PyTorch_Geometric-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)](https://pyg.org/)
@@ -6,7 +6,7 @@
 
 A highly optimized PyTorch Geometric benchmark for Graph Neural Network (GNN) based Recommender Systems with **Causal Reinforcement Learning** debiasing. This repository combines state-of-the-art collaborative filtering using graph structures with causal inference techniques to build unbiased, robust recommendation models.
 
-## 🌟 GNN Architectures
+## GNN Architectures
 
 ### 1. LightGCN (SIGIR 2020)
 Simplifies message passing by removing learnable transformations and non-linear activations, achieving superior performance on collaborative filtering tasks.
@@ -21,7 +21,7 @@ $$ e_u^{(k+1)} = \sigma(W_1 e_u^{(k)} + \sum_{i \in \mathcal{N}_u} \frac{1}{\sqr
 ### 3. GAT-CF (ICLR 2018)
 Adapted Graph Attention Networks for Collaborative Filtering, utilizing multi-head attention to learn neighbor importance weights dynamically.
 
-## 🧪 Causal RL Framework
+## Causal RL Framework
 
 Standard recommender systems learn from **biased observational data** — popular items get more exposure, creating a feedback loop that reinforces popularity bias. Our causal RL framework breaks this loop through three complementary approaches:
 
@@ -77,7 +77,7 @@ python train.py --model lightgcn --dataset ml-100k --causal pg --causal-discover
 
 *Note: Evaluating debiased recommendation models on standard (biased) test sets typically results in lower raw metric scores because the test set shares the same exposure bias as the training data. To properly evaluate the effectiveness of the causal models, unbiased test sets (e.g., uniform random logging data) are required.*
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Installation
 ```bash
@@ -104,7 +104,7 @@ python train.py --model lightgcn --dataset ml-100k --causal pg --pg-estimator dr
 python train.py --model gat --dataset amazon-books --hard-negatives
 ```
 
-## 📂 Project Structure
+## Project Structure
 ```text
 ├── models/
 │   ├── lightgcn.py           # PyG implementation of LightGCN
@@ -125,7 +125,7 @@ python train.py --model gat --dataset amazon-books --hard-negatives
 ```
 
 
-## 📚 References
+## References
 
 ### GNN Architectures
 1. **LightGCN:** He, X. et al. (2020). *LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation*. [SIGIR '20](https://arxiv.org/abs/2002.02126).
